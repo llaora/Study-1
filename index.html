@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Expérience</title>
+
+  <script src="https://unpkg.com/jspsych@8.2.1"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2.1.0"></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <link href="https://unpkg.com/jspsych@8.2.1/css/jspsych.css" rel="stylesheet" />
+
+  <style>
+    body {
+      background-color: white;
+      color: black;
+      font-family: Arial, sans-serif;
+    }
+
+    .phrase {
+      font-size: 34px;
+      text-align: center;
+      margin-top: 120px;
+      line-height: 1.4;
+    }
+
+    .keys {
+      font-size: 24px;
+      text-align: center;
+      margin-top: 120px;
+    }
+
+    .feedback {
+      font-size: 24px;
+      text-align: center;
+      margin-top: 120px;
+      color: black;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+
+<body></body>
+
+<script>
+  function downloadCSV(filename, csvContent) {
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function shuffle(array) {
+    return jsPsych.randomization.shuffle(array);
+  }
+
+  function createTrials(rows, assigned_condition) {
+    const condition_rows = rows.filter(row =>
+      row.condition &&
+      row.condition.trim().toLowerCase() === assigned_condition
+    );
+
+    if (condition_rows.length < 20) {
+      document.body.innerHTML = `
+        <h2>Erreur dans le fichier stimuli.csv</h2>
+        <p>La condition <strong>${assigned_condition}</strong> contient seulement
+        <strong>${condition_rows.length}</strong> items.</p>
+        <p>Il faut au minimum <strong>20 items</strong> pour créer 10 targets et 10 fillers.</p>
+        <p>Vérifie que ton fichier CSV contient bien 20 lignes pour focalized et 20 lignes pour presupposed.</p>
+      `;
+      throw new Error("Pas assez d'items dans le CSV.");
+    }
+
+    const shuffled_items = shuffle(condition_rows);
+
+    const target_items = shuffled_items.slice(0, 10);
+    const filler_items = shuffled_items.slice(10, 20);
+
+    let trials = [];
+
+    target_items.forEach(row => {
+      trials.push({
+        item_id: row.item_id,
+        topic: row.topic || "",
+        condition: assigned_condition,
+        item_type: "target",
+        version: "false",
+        phrase: row.false_phrase,
+        audio: row.audio_false || "",
+        correct_response: "l"
+      });
+    });
+
+    filler_items.forEach(row => {
+      trials.push({
+        item_id: row.item_id,
+        topic: row.topic || "",
+        condition: assigned_condition,
+        item_type: "filler",
+        version: "true",
+        phrase: row.true_phrase,
+        audio: row.audio_true || "",
+        correct_response: "a"
+      });
+    });
+
+    return shuffle(trials);
+  }
+
+  const participant_id = prompt("Entrez l'identifiant du participant :");
+  const participant_number = parseInt(participant_id.replace(/\D/g, ""));
+
+  let assigned_condition;
+
+  if (participant_number % 2 === 0) {
+    assigned_condition = "presupposed";
+  } else {
+    assigned_condition = "focalized";
+  }
+
+  const jsPsych = initJsPsych({
+    on_finish: function() {
+      const csv = jsPsych.data.get().csv();
+      const filename = "data_" + participant_id + "_" + assigned_condition + ".csv";
+      downloadCSV(filename, csv);
+
+      document.body.innerHTML =
+        "<h2>Merci. Les données ont été téléchargées.</h2>";
+    }
+  });
+
+  const instructions = {
+    type: jsPsychHtmlKeyboardResponse,
+    stimulus: `
+      <h2>Instructions</h2>
+
+      <p>Vous allez lire et entendre une série de phrases.</p>
+
+      <p>Chaque phrase apparaîtra à l'écran pendant que vous l'entendrez.</p>
+
+      <p>Lorsque l'audio sera terminé, la phrase disparaîtra.</p>
+
+      <p>Vous devrez alors indiquer si la phrase était vraie ou fausse.</p>
+
+      <p>
+        Appuyez sur la touche <strong>A</strong> si la phrase est vraie.
+      </p>
+
+      <p>
+        Appuyez sur la touche <strong>L</strong> si la phrase est fausse.
+      </p>
+
+      <p>
+        Si vous répondez <strong>faux</strong>, une question apparaîtra à l'écran.
+        Vous devrez alors expliquer oralement ce qui est faux dans la phrase.
+      </p>
+
+      <p>
+        Une fois votre réponse terminée, appuyez sur la barre espace pour passer à la phrase suivante.
+      </p>
+
+      <p>Appuyez sur espace pour commencer.</p>
+    `,
+    choices: [" "]
+  };
+
+  function makeAudioPhraseTrial(trial_info) {
+    return {
+      type: jsPsychHtmlKeyboardResponse,
+
+      stimulus: `
+        <div class="phrase">
+          ${trial_info.phrase}
+        </div>
+      `,
+
+      choices: "NO_KEYS",
+
+      data: {
+        trial_part: "audio_phrase",
+        participant_id: participant_id,
+        assigned_condition: assigned_condition,
+        item_id: trial_info.item_id,
+        topic: trial_info.topic,
+        condition: trial_info.condition,
+        item_type: trial_info.item_type,
+        version: trial_info.version,
+        phrase: trial_info.phrase,
+        audio: trial_info.audio
+      },
+
+      on_load: function() {
+        if (trial_info.audio && trial_info.audio.trim() !== "") {
+          const audio = new Audio(trial_info.audio);
+
+          audio.onended = function() {
+            jsPsych.finishTrial();
+          };
+
+          audio.onerror = function() {
+            alert("Erreur : le fichier audio n'a pas été trouvé : " + trial_info.audio);
+            jsPsych.finishTrial();
+          };
+
+          audio.play();
+        } else {
+          jsPsych.finishTrial();
+        }
+      }
+    };
+  }
+
+  function makeResponseTrial(trial_info) {
+    return {
+      type: jsPsychHtmlKeyboardResponse,
+
+      stimulus: `
+        <div class="keys">
+          A = vrai &nbsp;&nbsp;&nbsp;&nbsp; L = faux
+        </div>
+      `,
+
+      choices: ["a", "A", "l", "L"],
+
+      data: {
+        trial_part: "response",
+        participant_id: participant_id,
+        assigned_condition: assigned_condition,
+        item_id: trial_info.item_id,
+        topic: trial_info.topic,
+        condition: trial_info.condition,
+        item_type: trial_info.item_type,
+        version: trial_info.version,
+        phrase: trial_info.phrase,
+        audio: trial_info.audio,
+        correct_response: trial_info.correct_response
+      },
+
+      on_finish: function(data) {
+        data.response_lowercase = data.response.toLowerCase();
+        data.correct = data.response_lowercase === data.correct_response;
+      }
+    };
+  }
+
+  function makeJustificationTrial(trial_info) {
+    return {
+      timeline: [
+        {
+          type: jsPsychHtmlKeyboardResponse,
+
+          stimulus: `
+            <div class="feedback">
+              <p><strong>Qu'est-ce qui est faux ?</strong></p>
+              <p>Répondez oralement à l'expérimentatrice.</p>
+              <p>Une fois votre réponse terminée, appuyez sur espace pour continuer.</p>
+            </div>
+          `,
+
+          choices: [" "],
+
+          data: {
+            trial_part: "oral_justification",
+            participant_id: participant_id,
+            assigned_condition: assigned_condition,
+            item_id: trial_info.item_id,
+            topic: trial_info.topic,
+            condition: trial_info.condition,
+            item_type: trial_info.item_type,
+            version: trial_info.version,
+            phrase: trial_info.phrase,
+            audio: trial_info.audio
+          }
+        }
+      ],
+
+      conditional_function: function() {
+        const last_response = jsPsych.data.get().filter({
+          trial_part: "response"
+        }).last(1).values()[0];
+
+        return last_response.response_lowercase === "l";
+      }
+    };
+  }
+
+  function makeSpaceTrial() {
+    return {
+      type: jsPsychHtmlKeyboardResponse,
+
+      stimulus: `
+        <div class="feedback">
+          Appuyez sur espace pour passer à la phrase suivante.
+        </div>
+      `,
+
+      choices: [" "],
+
+      data: {
+        trial_part: "space_to_continue"
+      }
+    };
+  }
+
+  Papa.parse("stimuli.csv", {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+
+    complete: function(results) {
+      const rows = results.data;
+      const selected_trials = createTrials(rows, assigned_condition);
+
+      let timeline = [];
+      timeline.push(instructions);
+
+      selected_trials.forEach(trial_info => {
+        timeline.push(makeAudioPhraseTrial(trial_info));
+        timeline.push(makeResponseTrial(trial_info));
+        timeline.push(makeJustificationTrial(trial_info));
+        timeline.push(makeSpaceTrial());
+      });
+
+      const end = {
+        type: jsPsychHtmlKeyboardResponse,
+
+        stimulus: `
+          <h2>Fin de l'expérience</h2>
+          <p>Merci pour votre participation.</p>
+          <p>Appuyez sur espace pour terminer et télécharger les données.</p>
+        `,
+
+        choices: [" "]
+      };
+
+      timeline.push(end);
+      jsPsych.run(timeline);
+    }
+  });
+</script>
+</html>
