@@ -7,6 +7,7 @@
   <script src="https://unpkg.com/jspsych@8.2.1"></script>
   <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@2.1.0"></script>
   <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <link href="https://unpkg.com/jspsych@8.2.1/css/jspsych.css" rel="stylesheet" />
 
@@ -121,15 +122,102 @@
     assigned_condition = "focalized";
   }
 
-  const jsPsych = initJsPsych({
-    on_finish: function() {
-      const csv = jsPsych.data.get().csv();
-      const filename = "data_" + participant_id + "_" + assigned_condition + ".csv";
-      downloadCSV(filename, csv);
+const jsPsych = initJsPsych({
+  on_finish: function() {
 
-      document.body.innerHTML =
-        "<h2>Merci. Les données ont été téléchargées.</h2>";
-    }
+    document.body.innerHTML = `
+      <div style="
+        max-width:800px;
+        margin:50px auto;
+        text-align:center;
+        font-family:Arial,sans-serif;
+      ">
+
+        <h1>Merci pour votre participation !</h1>
+
+        <p>
+          L'expérience est maintenant terminée.
+        </p>
+
+        <p>
+          Nous vous remercions pour le temps que vous nous avez consacré.
+        </p>
+
+        <div style="
+          border:3px solid #d32f2f;
+          background:#ffebee;
+          padding:25px;
+          margin-top:40px;
+          border-radius:10px;
+        ">
+
+          <h2 style="color:#d32f2f;">
+            IMPORTANT
+          </h2>
+
+          <p style="
+            color:#d32f2f;
+            font-size:20px;
+            font-weight:bold;
+          ">
+            Veuillez télécharger les données avant de fermer cette fenêtre.
+          </p>
+
+          <button
+            id="downloadButton"
+            style="
+              background:#d32f2f;
+              color:white;
+              border:none;
+              padding:15px 30px;
+              font-size:20px;
+              border-radius:8px;
+              cursor:pointer;
+              margin-top:15px;
+            "
+          >
+            Télécharger les données
+          </button>
+
+        </div>
+
+      </div>
+    `;
+
+    document
+      .getElementById("downloadButton")
+      .addEventListener("click", function() {
+
+        const data = jsPsych.data.get().values();
+
+        const worksheet =
+          XLSX.utils.json_to_sheet(data);
+
+        const workbook =
+          XLSX.utils.book_new();
+
+        XLSX.utils.book_append_sheet(
+          workbook,
+          worksheet,
+          "data"
+        );
+
+        const filename =
+          "data_" +
+          participant_id +
+          "_" +
+          assigned_condition +
+          ".xlsx";
+
+        XLSX.writeFile(
+          workbook,
+          filename
+        );
+
+        this.innerHTML = "✓ Données téléchargées";
+        this.disabled = true;
+      });
+  }
   });
 
   const instructions = {
