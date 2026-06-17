@@ -412,19 +412,6 @@ const jsPsych = initJsPsych({
         timeline.push(makeSpaceTrial());
       });
 
-      const end = {
-        type: jsPsychHtmlKeyboardResponse,
-
-        stimulus: `
-          <h2>Fin de l'expérience</h2>
-          <p>Merci pour votre participation.</p>
-          <p>Appuyez sur espace pour terminer et télécharger les données.</p>
-        `,
-
-        choices: [" "]
-      };
-
-      timeline.push(end);
       jsPsych.run(timeline);
     }
   });
